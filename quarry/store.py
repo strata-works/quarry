@@ -10,7 +10,9 @@ forbids that delete, which is why the prototype couldn't dedupe).
 """
 from __future__ import annotations
 
+import hashlib
 import sqlite3
+from pathlib import Path
 
 from .content import ArticleRecord
 
@@ -30,13 +32,26 @@ CREATE TABLE IF NOT EXISTS xref(
     target_refid  INTEGER,
     PRIMARY KEY (refid, target_refid)
 );
+CREATE TABLE IF NOT EXISTS asset(
+    baggage_id  TEXT PRIMARY KEY,   -- entry stem; FK target of the gid->hexid map
+    hash        TEXT,               -- content hash (dedupe key)
+    kind        TEXT,
+    ext         TEXT,
+    path        TEXT,               -- relative path under assets_dir
+    source      TEXT
+);
 """
 
 
 class ContentStore:
-    def __init__(self, path: str = ":memory:"):
+    def __init__(self, path: str = ":memory:", assets_dir: str | None = None):
         self.db = sqlite3.connect(path)
         self.db.executescript(_SCHEMA)
+        self.assets_dir = Path(assets_dir) if assets_dir else None
+        # hash -> relative path, seeded from existing rows so re-runs stay deduped.
+        self._seen_hash: dict[str, str] = {
+            h: p for h, p in self.db.execute("SELECT hash, path FROM asset")
+        }
 
     def add_article(self, rec: ArticleRecord, source: str) -> None:
         db = self.db
@@ -55,6 +70,27 @@ class ContentStore:
             "INSERT OR IGNORE INTO xref(refid, target_refid) VALUES (?,?)",
             [(rec.refid, t) for t in rec.xrefs],
         )
+
+    def add_asset(self, baggage_id: str, data: bytes, kind: str, ext: str, source: str) -> None:
+        if self.assets_dir is None:
+            raise ValueError("ContentStore has no assets_dir; cannot store assets")
+        digest = hashlib.sha1(data).hexdigest()[:16]
+        relpath = self._seen_hash.get(digest)
+        if relpath is None:
+            dest = self.assets_dir / kind / f"{digest}{ext}"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.exists():
+                dest.write_bytes(data)
+            relpath = str(dest.relative_to(self.assets_dir))
+            self._seen_hash[digest] = relpath
+        self.db.execute(
+            "INSERT OR REPLACE INTO asset(baggage_id, hash, kind, ext, path, source) "
+            "VALUES (?,?,?,?,?,?)",
+            (baggage_id, digest, kind, ext, relpath, source),
+        )
+
+    def asset_count(self) -> int:
+        return self.db.execute("SELECT count(*) FROM asset").fetchone()[0]
 
     def commit(self) -> None:
         self.db.commit()

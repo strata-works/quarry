@@ -17,6 +17,7 @@ from pathlib import Path
 
 from strata_akc_dump.portable_akc import write_refid_key_map
 
+from .assets import ingest_eit
 from .ingest import ingest_akc
 from .store import ContentStore
 
@@ -26,6 +27,9 @@ logger = logging.getLogger(__name__)
 # student-compact, kids.
 CONTENT_FAMILIES = {"CONTSTD", "CONTDLX", "CONTSTC", "CONTKDC"}
 
+# ITOLITLS container extensions holding media/baggage + the catalog.
+CONTAINER_EXTS = {".eit", ".itr", ".ste"}
+
 
 def discover_content_akc(src: str) -> list[Path]:
     found: list[Path] = []
@@ -33,6 +37,15 @@ def discover_content_akc(src: str) -> list[Path]:
         for fn in files:
             stem, ext = os.path.splitext(fn)
             if ext.lower() == ".akc" and stem.upper() in CONTENT_FAMILIES:
+                found.append(Path(dirpath) / fn)
+    return sorted(found)
+
+
+def discover_eit(src: str) -> list[Path]:
+    found: list[Path] = []
+    for dirpath, _dirs, files in os.walk(src):
+        for fn in files:
+            if os.path.splitext(fn)[1].lower() in CONTAINER_EXTS:
                 found.append(Path(dirpath) / fn)
     return sorted(found)
 
@@ -54,12 +67,18 @@ def build_corpus(
     map_dir: str,
     families: set[str] | None = None,
     limit: int | None = None,
+    with_assets: bool = True,
+    with_content: bool = True,
 ) -> dict:
-    akcs = discover_content_akc(src)
+    akcs = discover_content_akc(src) if with_content else []
     if families:
         want = {f.upper() for f in families}
         akcs = [a for a in akcs if a.stem.upper() in want]
-    totals = {"families": 0, "ok": 0, "failed": 0, "per_family": {}}
+    totals = {
+        "families": 0, "ok": 0, "failed": 0, "per_family": {},
+        "containers": 0, "assets_ok": 0, "assets_failed": 0,
+    }
+    # Article content (AKC).
     for akc in akcs:
         map_path = _ensure_map(akc, Path(map_dir))
         stats = ingest_akc(str(akc), str(map_path), store, limit=limit, source=akc.name)
@@ -69,4 +88,18 @@ def build_corpus(
         totals["failed"] += stats["failed"]
         totals["per_family"][akc.name] = stats
         logger.warning("ingested %s: %s", akc.name, stats)
+
+    # Media/baggage assets (EIT containers).
+    if with_assets and store.assets_dir is not None:
+        for eit in discover_eit(src):
+            try:
+                stats = ingest_eit(str(eit), store, source=eit.name)
+            except Exception as exc:  # noqa: BLE001 — non-ITOLITLS / unreadable, skip
+                logger.warning("skipping container %s: %s", eit.name, exc)
+                continue
+            store.commit()
+            totals["containers"] += 1
+            totals["assets_ok"] += stats["ok"]
+            totals["assets_failed"] += stats["failed"]
+            logger.warning("ingested %s: %s", eit.name, stats)
     return totals

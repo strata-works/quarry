@@ -17,17 +17,23 @@ from .store import ContentStore
 
 def cmd_build(args) -> int:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
-    store = ContentStore(args.db)
+    store = ContentStore(args.db, assets_dir=None if args.no_assets else args.assets_dir)
     totals = build_corpus(
-        args.src, store, map_dir=args.map_dir, families=set(args.family or []), limit=args.limit
+        args.src, store, map_dir=args.map_dir, families=set(args.family or []),
+        limit=args.limit, with_assets=not args.no_assets, with_content=not args.assets_only,
     )
-    if totals["families"] == 0:
-        print(f"no content AKC families found under {args.src}")
+    if totals["families"] == 0 and totals["containers"] == 0:
+        print(f"no content AKC families or EIT containers found under {args.src}")
         return 1
     print(
         f"built {totals['families']} families: {totals['ok']} articles "
-        f"({totals['failed']} failed) -> {args.db}; "
-        f"articles={store.article_count()} fts={store.fts_count()} xref={store.xref_count()}"
+        f"({totals['failed']} failed); "
+        f"{totals['containers']} containers: {totals['assets_ok']} assets "
+        f"({totals['assets_failed']} failed) -> {args.db}"
+    )
+    print(
+        f"  totals: articles={store.article_count()} fts={store.fts_count()} "
+        f"xref={store.xref_count()} assets={store.asset_count()}"
     )
     for name, stats in totals["per_family"].items():
         print(f"  {name}: {stats['ok']} ok, {stats['failed']} failed")
@@ -63,6 +69,9 @@ def main(argv=None) -> int:
     w.add_argument("--src", required=True, help="extracted Encarta root (walked recursively)")
     w.add_argument("--db", default="./build/encarta.sqlite")
     w.add_argument("--map-dir", default="./output/maps", help="where per-family key maps are cached/built")
+    w.add_argument("--assets-dir", default="./build/assets", help="content-addressed asset store dir")
+    w.add_argument("--no-assets", action="store_true", help="skip the EIT/asset pass (content only)")
+    w.add_argument("--assets-only", action="store_true", help="skip AKC content; only walk EIT for assets")
     w.add_argument("--family", action="append",
                    help="restrict to a content family stem, e.g. CONTSTD; may repeat")
     w.add_argument("--limit", type=int, help="ingest only the first N records per family (smoke test)")
