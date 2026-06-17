@@ -1,6 +1,7 @@
 """quarry — Encarta content ETL CLI.
 
-  build-content   CONT*.AKC + key map  -> SQLite (article + FTS5 + xref graph)
+  build           walk an Encarta dir tree -> SQLite (all content families)
+  build-content   one CONT*.AKC + key map -> SQLite (article + FTS5 + xref graph)
   search          query the built DB
 """
 from __future__ import annotations
@@ -9,8 +10,28 @@ import argparse
 import logging
 import sys
 
+from .corpus import build_corpus
 from .ingest import ingest_akc
 from .store import ContentStore
+
+
+def cmd_build(args) -> int:
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
+    store = ContentStore(args.db)
+    totals = build_corpus(
+        args.src, store, map_dir=args.map_dir, families=set(args.family or []), limit=args.limit
+    )
+    if totals["families"] == 0:
+        print(f"no content AKC families found under {args.src}")
+        return 1
+    print(
+        f"built {totals['families']} families: {totals['ok']} articles "
+        f"({totals['failed']} failed) -> {args.db}; "
+        f"articles={store.article_count()} fts={store.fts_count()} xref={store.xref_count()}"
+    )
+    for name, stats in totals["per_family"].items():
+        print(f"  {name}: {stats['ok']} ok, {stats['failed']} failed")
+    return 0
 
 
 def cmd_build_content(args) -> int:
@@ -38,7 +59,16 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="quarry", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    b = sub.add_parser("build-content", help="CONT*.AKC -> SQLite content store")
+    w = sub.add_parser("build", help="walk an Encarta dir tree and ingest all content families")
+    w.add_argument("--src", required=True, help="extracted Encarta root (walked recursively)")
+    w.add_argument("--db", default="./build/encarta.sqlite")
+    w.add_argument("--map-dir", default="./output/maps", help="where per-family key maps are cached/built")
+    w.add_argument("--family", action="append",
+                   help="restrict to a content family stem, e.g. CONTSTD; may repeat")
+    w.add_argument("--limit", type=int, help="ingest only the first N records per family (smoke test)")
+    w.set_defaults(func=cmd_build)
+
+    b = sub.add_parser("build-content", help="one CONT*.AKC -> SQLite content store")
     b.add_argument("--akc", required=True, help="path to a CONT*.AKC file")
     b.add_argument("--map", required=True, help="key/refid map TSV (from strata-akc map-akc)")
     b.add_argument("--db", default="./build/encarta.sqlite")
