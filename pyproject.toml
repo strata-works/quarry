@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "strata-quarry"
+version = "0.0.1"
+description = "Encarta content ETL: decoded AKC/EIT -> SQLite + FTS5 + deduped assets + manifest"
+requires-python = ">=3.10"
+dependencies = [
+    # The portable AKC/LIT decoder. Installed editable during development:
+    #   pip install -e ../akc
+    "strata-akc-portable",
+]
+
+[project.scripts]
+quarry = "quarry.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["quarry*"]
