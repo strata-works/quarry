@@ -6,3 +6,5 @@ build/
 *.sqlite-*
 *.egg-info/
 dist/
+
+output/

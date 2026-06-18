@@ -33,12 +33,33 @@ CREATE TABLE IF NOT EXISTS xref(
     PRIMARY KEY (refid, target_refid)
 );
 CREATE TABLE IF NOT EXISTS asset(
-    baggage_id  TEXT PRIMARY KEY,   -- entry stem; FK target of the gid->hexid map
+    baggage_id  TEXT PRIMARY KEY,   -- entry stem; joined to by media_file.baggage_id
     hash        TEXT,               -- content hash (dedupe key)
     kind        TEXT,
     ext         TEXT,
     path        TEXT,               -- relative path under assets_dir
     source      TEXT
+);
+-- Media records + the article<->asset link, resolved from DATA*.AKC (NEX-392).
+CREATE TABLE IF NOT EXISTS media(
+    refid    INTEGER PRIMARY KEY,   -- the media content-id
+    "group"  TEXT,
+    title    TEXT,
+    credit   TEXT,
+    caption  TEXT,
+    source   TEXT
+);
+CREATE TABLE IF NOT EXISTS media_file(
+    media_refid  INTEGER,
+    role         TEXT,              -- ticon | picon | thumb | image | ...
+    baggage_id   TEXT,              -- joins to asset.baggage_id
+    ext          TEXT,
+    PRIMARY KEY (media_refid, role)
+);
+CREATE TABLE IF NOT EXISTS article_media(
+    article_refid  INTEGER,
+    media_refid    INTEGER,
+    PRIMARY KEY (article_refid, media_refid)
 );
 """
 
@@ -91,6 +112,45 @@ class ContentStore:
 
     def asset_count(self) -> int:
         return self.db.execute("SELECT count(*) FROM asset").fetchone()[0]
+
+    def add_media_record(self, rec, source: str) -> None:
+        db = self.db
+        db.execute(
+            'INSERT OR REPLACE INTO media(refid, "group", title, credit, caption, source) '
+            "VALUES (?,?,?,?,?,?)",
+            (rec.refid, rec.group, rec.title, rec.credit, rec.caption, source),
+        )
+        db.execute("DELETE FROM media_file WHERE media_refid=?", (rec.refid,))
+        db.executemany(
+            "INSERT OR REPLACE INTO media_file(media_refid, role, baggage_id, ext) VALUES (?,?,?,?)",
+            [(rec.refid, f.role, f.baggage_id, f.ext) for f in rec.files],
+        )
+        db.executemany(
+            "INSERT OR IGNORE INTO article_media(article_refid, media_refid) VALUES (?,?)",
+            [(a, rec.refid) for a in rec.article_refids],
+        )
+
+    def media_count(self) -> int:
+        return self.db.execute("SELECT count(*) FROM media").fetchone()[0]
+
+    def media_file_count(self) -> int:
+        return self.db.execute("SELECT count(*) FROM media_file").fetchone()[0]
+
+    def article_media_count(self) -> int:
+        return self.db.execute("SELECT count(*) FROM article_media").fetchone()[0]
+
+    def assets_for_article(self, article_refid: int) -> list[dict]:
+        """Resolve an article's media to stored asset files (the NEX-392 join)."""
+        rows = self.db.execute(
+            "SELECT mf.media_refid, mf.role, mf.baggage_id, a.path, a.kind "
+            "FROM article_media am "
+            "JOIN media_file mf ON mf.media_refid = am.media_refid "
+            "LEFT JOIN asset a ON a.baggage_id = mf.baggage_id "
+            "WHERE am.article_refid = ?",
+            (article_refid,),
+        ).fetchall()
+        cols = ("media_refid", "role", "baggage_id", "path", "kind")
+        return [dict(zip(cols, r)) for r in rows]
 
     def commit(self) -> None:
         self.db.commit()

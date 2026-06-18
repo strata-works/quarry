@@ -13,6 +13,7 @@ from pathlib import Path
 from strata_akc_dump.portable_akc import ArticleWindow, PortableAkcDecoder
 
 from .content import parse_article
+from .media import parse_data_record
 from .store import ContentStore
 
 logger = logging.getLogger(__name__)
@@ -63,5 +64,29 @@ def ingest_akc(
             logger.warning("ingest failed for refid %s: %s", refid, exc)
             continue
         store.add_article(rec, source=source)
+        stats["ok"] += 1
+    return stats
+
+
+def ingest_data(
+    akc_path: str,
+    map_path: str,
+    store: ContentStore,
+    limit: int | None = None,
+    source: str | None = None,
+) -> dict:
+    """Ingest DATA*.AKC media records -> media/media_file/article_media (NEX-392)."""
+    source = source or os.path.basename(akc_path)
+    dec = PortableAkcDecoder(Path(akc_path), map_path=Path(map_path))
+    stats = {"ok": 0, "failed": 0}
+    for refid, win in _read_map(map_path, limit=limit):
+        try:
+            record = dec.decode_window(win) if win.body_off >= 0 else dec.decode_key(win.key)
+            rec = parse_data_record(record.xml)
+        except Exception as exc:  # noqa: BLE001 — record and continue
+            stats["failed"] += 1
+            logger.warning("data ingest failed for refid %s: %s", refid, exc)
+            continue
+        store.add_media_record(rec, source=source)
         stats["ok"] += 1
     return stats
