@@ -21,7 +21,7 @@ def cmd_build(args) -> int:
     totals = build_corpus(
         args.src, store, map_dir=args.map_dir, families=set(args.family or []),
         limit=args.limit, with_assets=not args.no_assets, with_content=not args.assets_only,
-        with_media=not args.no_media and not args.assets_only,
+        with_media=not args.no_media and not args.assets_only, workers=args.workers,
     )
     if totals["families"] == 0 and totals["media_families"] == 0 and totals["containers"] == 0:
         print(f"no content/data AKC families or EIT containers found under {args.src}")
@@ -76,6 +76,7 @@ def main(argv=None) -> int:
     w.add_argument("--family", action="append",
                    help="restrict to a content family stem, e.g. CONTSTD; may repeat")
     w.add_argument("--limit", type=int, help="ingest only the first N records per family (smoke test)")
+    w.add_argument("--workers", type=int, help="parallel worker processes for the EIT/asset pass (default: pool default; 1 = sequential)")
     w.set_defaults(func=cmd_build)
 
     b = sub.add_parser("build-content", help="one CONT*.AKC -> SQLite content store")

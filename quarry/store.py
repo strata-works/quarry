@@ -110,6 +110,16 @@ class ContentStore:
             (baggage_id, digest, kind, ext, relpath, source),
         )
 
+    def add_asset_row(self, baggage_id: str, digest: str, kind: str, ext: str,
+                      path: str, source: str) -> None:
+        """DB-only insert of an asset whose file a worker already wrote (parallel path)."""
+        self._seen_hash.setdefault(digest, path)
+        self.db.execute(
+            "INSERT OR REPLACE INTO asset(baggage_id, hash, kind, ext, path, source) "
+            "VALUES (?,?,?,?,?,?)",
+            (baggage_id, digest, kind, ext, path, source),
+        )
+
     def asset_count(self) -> int:
         return self.db.execute("SELECT count(*) FROM asset").fetchone()[0]
 

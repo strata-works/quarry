@@ -82,6 +82,7 @@ def build_corpus(
     with_assets: bool = True,
     with_content: bool = True,
     with_media: bool = True,
+    workers: int | None = None,
 ) -> dict:
     akcs = discover_content_akc(src) if with_content else []
     if families:
@@ -119,17 +120,25 @@ def build_corpus(
             totals["media_failed"] += stats["failed"]
             logger.warning("ingested %s: %s", akc.name, stats)
 
-    # Media/baggage assets (EIT containers).
+    # Media/baggage assets (EIT containers) — parallel across cores when workers != 1.
     if with_assets and store.assets_dir is not None:
-        for eit in discover_eit(src):
-            try:
-                stats = ingest_eit(str(eit), store, source=eit.name)
-            except Exception as exc:  # noqa: BLE001 — non-ITOLITLS / unreadable, skip
-                logger.warning("skipping container %s: %s", eit.name, exc)
-                continue
-            store.commit()
-            totals["containers"] += 1
-            totals["assets_ok"] += stats["ok"]
-            totals["assets_failed"] += stats["failed"]
-            logger.warning("ingested %s: %s", eit.name, stats)
+        eits = discover_eit(src)
+        if workers is None or workers > 1:
+            from .parallel import ingest_eit_parallel
+            ptotals = ingest_eit_parallel(eits, store, workers=workers)
+            totals["containers"] += ptotals["containers"]
+            totals["assets_ok"] += ptotals["assets_ok"]
+            totals["assets_failed"] += ptotals["assets_failed"]
+        else:
+            for eit in eits:
+                try:
+                    stats = ingest_eit(str(eit), store, source=eit.name)
+                except Exception as exc:  # noqa: BLE001 — non-ITOLITLS / unreadable, skip
+                    logger.warning("skipping container %s: %s", eit.name, exc)
+                    continue
+                store.commit()
+                totals["containers"] += 1
+                totals["assets_ok"] += stats["ok"]
+                totals["assets_failed"] += stats["failed"]
+                logger.warning("ingested %s: %s", eit.name, stats)
     return totals
