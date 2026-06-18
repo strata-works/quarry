@@ -18,7 +18,7 @@ from pathlib import Path
 from strata_akc_dump.portable_akc import write_refid_key_map
 
 from .assets import ingest_eit
-from .ingest import ingest_akc
+from .ingest import ingest_akc, ingest_data
 from .store import ContentStore
 
 logger = logging.getLogger(__name__)
@@ -27,18 +27,30 @@ logger = logging.getLogger(__name__)
 # student-compact, kids.
 CONTENT_FAMILIES = {"CONTSTD", "CONTDLX", "CONTSTC", "CONTKDC"}
 
+# Media/data-metadata families (the article<->asset link, NEX-392). Excludes the
+# DATAF* index family (unsupported decoder path) and the DATA*SK source-gate files.
+DATA_FAMILIES = {"DATASTD", "DATADLX", "DATASTC", "DATAKDC"}
+
 # ITOLITLS container extensions holding media/baggage + the catalog.
 CONTAINER_EXTS = {".eit", ".itr", ".ste"}
 
 
-def discover_content_akc(src: str) -> list[Path]:
+def _discover_akc(src: str, families: set[str]) -> list[Path]:
     found: list[Path] = []
     for dirpath, _dirs, files in os.walk(src):
         for fn in files:
             stem, ext = os.path.splitext(fn)
-            if ext.lower() == ".akc" and stem.upper() in CONTENT_FAMILIES:
+            if ext.lower() == ".akc" and stem.upper() in families:
                 found.append(Path(dirpath) / fn)
     return sorted(found)
+
+
+def discover_content_akc(src: str) -> list[Path]:
+    return _discover_akc(src, CONTENT_FAMILIES)
+
+
+def discover_data_akc(src: str) -> list[Path]:
+    return _discover_akc(src, DATA_FAMILIES)
 
 
 def discover_eit(src: str) -> list[Path]:
@@ -69,6 +81,7 @@ def build_corpus(
     limit: int | None = None,
     with_assets: bool = True,
     with_content: bool = True,
+    with_media: bool = True,
 ) -> dict:
     akcs = discover_content_akc(src) if with_content else []
     if families:
@@ -76,6 +89,7 @@ def build_corpus(
         akcs = [a for a in akcs if a.stem.upper() in want]
     totals = {
         "families": 0, "ok": 0, "failed": 0, "per_family": {},
+        "media_families": 0, "media_ok": 0, "media_failed": 0,
         "containers": 0, "assets_ok": 0, "assets_failed": 0,
     }
     # Article content (AKC).
@@ -88,6 +102,22 @@ def build_corpus(
         totals["failed"] += stats["failed"]
         totals["per_family"][akc.name] = stats
         logger.warning("ingested %s: %s", akc.name, stats)
+
+    # Media metadata + article<->asset links (DATA*.AKC, NEX-392).
+    if with_media:
+        data_akcs = discover_data_akc(src)
+        if families:
+            # match on edition suffix so e.g. --family CONTSTD also selects DATASTD
+            want_suffix = {f.upper()[-3:] for f in families}
+            data_akcs = [a for a in data_akcs if a.stem.upper()[-3:] in want_suffix]
+        for akc in data_akcs:
+            map_path = _ensure_map(akc, Path(map_dir))
+            stats = ingest_data(str(akc), str(map_path), store, limit=limit, source=akc.name)
+            store.commit()
+            totals["media_families"] += 1
+            totals["media_ok"] += stats["ok"]
+            totals["media_failed"] += stats["failed"]
+            logger.warning("ingested %s: %s", akc.name, stats)
 
     # Media/baggage assets (EIT containers).
     if with_assets and store.assets_dir is not None:
