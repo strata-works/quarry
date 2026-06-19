@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from strata_akc_dump.lit import EitFile
 
@@ -72,7 +72,11 @@ def ingest_eit_parallel(eit_paths, store: ContentStore, workers: int | None = No
     args = [(str(p), assets_dir) for p in eit_paths]
     totals = {"containers": 0, "assets_ok": 0, "assets_failed": 0, "skipped_containers": 0}
     with ProcessPoolExecutor(max_workers=workers) as ex:
-        for rows, stats in ex.map(_extract_container, args):
+        # as_completed (not map) so each container commits as soon as it finishes —
+        # a slow 100MB+ container can't head-of-line-block all the small ones.
+        futures = [ex.submit(_extract_container, a) for a in args]
+        for fut in as_completed(futures):
+            rows, stats = fut.result()
             if stats["error"]:
                 totals["skipped_containers"] += 1
                 logger.warning("skipping container %s: %s", stats["source"], stats["error"])
