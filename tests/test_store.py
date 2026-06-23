@@ -40,6 +40,17 @@ class ContentStoreTests(unittest.TestCase):
         self.assertEqual(self.store.search("Ottoman"), [1741500128])
         self.assertEqual(self.store.search("nonexistentword"), [])
 
+    def test_fts_is_contentless_keeps_no_body_copy(self):
+        # The body already lives in article.xml; the FTS must not store a second
+        # copy (contentless fts5). Search still works; the column reads back NULL.
+        self.store.add_article(self.rec, source="CONTSTD.AKC")
+        self.store.commit()
+        self.assertEqual(self.store.search("Ottoman"), [1741500128])
+        body = self.store.db.execute(
+            "SELECT body FROM article_fts WHERE rowid=1741500128"
+        ).fetchone()[0]
+        self.assertIsNone(body)
+
 
 if __name__ == "__main__":
     unittest.main()

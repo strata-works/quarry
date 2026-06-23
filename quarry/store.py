@@ -4,9 +4,12 @@ Idempotent by design: re-ingesting an article replaces its rows in every table
 (article, article_fts, xref) instead of appending — fixing the prototype's bug
 where ``article_fts`` accumulated duplicate rows on each run.
 
-``article_fts`` is a regular FTS5 table with ``rowid = refid``, so a re-ingest is
-a plain ``DELETE ... WHERE rowid=?`` followed by an insert (contentless FTS5
-forbids that delete, which is why the prototype couldn't dedupe).
+``article_fts`` is a **contentless** FTS5 table (``content=''``) with
+``rowid = refid``: the body text already lives in ``article.xml``, so the index
+keeps no second copy (~30% smaller DB). ``contentless_delete=1`` keeps the
+``DELETE ... WHERE rowid=?`` re-ingest working (plain contentless FTS5 forbids
+delete, which is why the prototype couldn't dedupe). Search returns rowids ranked
+by ``bm25``; snippets, if ever needed, come from ``article.xml``.
 """
 from __future__ import annotations
 
@@ -25,6 +28,8 @@ CREATE TABLE IF NOT EXISTS article(
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS article_fts USING fts5(
     body,
+    content='',                -- contentless: body already lives in article.xml
+    contentless_delete=1,      -- still allow DELETE for idempotent re-ingest (SQLite >=3.35)
     tokenize='unicode61'
 );
 CREATE TABLE IF NOT EXISTS xref(
