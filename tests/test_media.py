@@ -7,7 +7,7 @@ SAMPLE = (
     b'<data refid="102613117" group="media" ticon="image" origin="EE" InVB="1" revision="105">'
     b'<title>Traffic in Quito, Ecuador</title>'
     b'<credit>K. Rodgers/Hutchison Library</credit>'
-    b'<caption>Many of Ecuador\x92s cities ...</caption>'
+    b'<caption>Many of Ecuador\xe2\x80\x99s cities ...</caption>'
     b'<files>'
     b'<ticon x="16" y="16">msencdata::baggage/transparent.gif</ticon>'
     b'<picon x="216" y="192">msencdata::baggage/t062836a.jsm</picon>'
@@ -41,6 +41,16 @@ class ParseDataRecordTests(unittest.TestCase):
     def test_reverse_assoc_gives_deduped_article_refids(self):
         # the article -> media link; 761563377 appears twice, must dedupe
         self.assertEqual(parse_data_record(SAMPLE).article_refids, [761563377, 761565312])
+
+    def test_decodes_utf8_title_with_smartquote(self):
+        # Real DATA*.AKC records are UTF-8: U+2019 (') is bytes E2 80 99, not the
+        # windows-1252 single byte 0x92. Confirmed against raw DATASTD bytes for
+        # "A Bug's Life" (refid 461510896).
+        rec = parse_data_record(
+            b'<data refid="461510896" group="article">'
+            b'<title>A Bug\xe2\x80\x99s Life</title></data>'
+        )
+        self.assertEqual(rec.title, "A Bug’s Life")
 
 
 if __name__ == "__main__":

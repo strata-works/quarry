@@ -36,7 +36,7 @@ _ASSOC_ARTICLE_RE = re.compile(rb'<assoc\b[^>]*\brefid="(\d+)"[^>]*\bgroup="arti
 
 def _text(pattern, data: bytes) -> str | None:
     m = pattern.search(data)
-    return m.group(1).decode("windows-1252", "replace").strip() if m else None
+    return m.group(1).decode("utf-8", "replace").strip() if m else None
 
 
 @dataclass(frozen=True)
@@ -59,13 +59,13 @@ class DataRecord:
 
 def parse_data_record(xml: bytes) -> DataRecord:
     if isinstance(xml, str):
-        xml = xml.encode("windows-1252", "replace")
+        xml = xml.encode("utf-8", "replace")
     m = _REFID_RE.search(xml)
     if not m:
         raise ValueError("no <data refid=...> root in record")
     refid = int(m.group(1))
     gm = _GROUP_RE.search(xml)
-    group = gm.group(1).decode("windows-1252", "replace") if gm else None
+    group = gm.group(1).decode("utf-8", "replace") if gm else None
 
     files: list[MediaFile] = []
     fm = _FILES_RE.search(xml)

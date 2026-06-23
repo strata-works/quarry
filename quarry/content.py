@@ -31,12 +31,12 @@ class ArticleRecord:
 
 def parse_article(xml: bytes) -> ArticleRecord:
     if isinstance(xml, str):
-        xml = xml.encode("windows-1252", "replace")
+        xml = xml.encode("utf-8", "replace")
     m = _REFID_RE.search(xml)
     if not m:
         raise ValueError("no <content refid=...> root in record")
     refid = int(m.group(1))
     xrefs = [int(x) for x in _XREF_RE.findall(xml)]
-    txt = xml.decode("windows-1252", "replace")
+    txt = xml.decode("utf-8", "replace")
     txt = _WS_RE.sub(" ", _TAG_RE.sub(" ", txt)).strip()
     return ArticleRecord(refid=refid, xml=xml, text=txt, xrefs=xrefs)

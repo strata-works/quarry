@@ -141,4 +141,10 @@ def build_corpus(
                 totals["assets_ok"] += stats["ok"]
                 totals["assets_failed"] += stats["failed"]
                 logger.warning("ingested %s: %s", eit.name, stats)
+
+    # Article titles live in the same-refid DATA* record, not the body XML; fill them
+    # once content + media are in place (idempotent, no-ops if either side is absent).
+    totals["titles"] = store.backfill_article_titles()
+    store.commit()
+    logger.warning("backfilled %d article titles", totals["titles"])
     return totals

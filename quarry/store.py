@@ -149,6 +149,27 @@ class ContentStore:
     def article_media_count(self) -> int:
         return self.db.execute("SELECT count(*) FROM article_media").fetchone()[0]
 
+    def backfill_article_titles(self) -> int:
+        """Set article.title from the same-refid DATA* media record.
+
+        Encarta article titles aren't in the body XML; each article's own
+        DATA*.AKC record (media.refid == article.refid) carries the display
+        title. Returns the number of article rows updated.
+        """
+        cur = self.db.execute(
+            "UPDATE article SET title = ("
+            "  SELECT m.title FROM media m WHERE m.refid = article.refid"
+            ") WHERE refid IN ("
+            "  SELECT refid FROM media WHERE title IS NOT NULL AND title != ''"
+            ")"
+        )
+        return cur.rowcount
+
+    def title_count(self) -> int:
+        return self.db.execute(
+            "SELECT count(*) FROM article WHERE title IS NOT NULL AND title != ''"
+        ).fetchone()[0]
+
     def assets_for_article(self, article_refid: int) -> list[dict]:
         """Resolve an article's media to stored asset files (the NEX-392 join)."""
         rows = self.db.execute(

@@ -34,6 +34,14 @@ class ParseArticleTests(unittest.TestCase):
         rec = parse_article(SAMPLE)
         self.assertIn(b"<sectiontitle>INTRODUCTION", rec.xml)
 
+    def test_fts_text_decodes_utf8(self):
+        # Article bodies are UTF-8: U+2019 (') is bytes E2 80 99. The FTS text must
+        # carry the real character, not windows-1252 mojibake.
+        rec = parse_article(
+            b'<content refid="1"><text>Bug\xe2\x80\x99s Life</text></content>'
+        )
+        self.assertIn("Bug’s Life", rec.text)
+
 
 if __name__ == "__main__":
     unittest.main()
