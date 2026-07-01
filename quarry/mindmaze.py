@@ -8,8 +8,10 @@ encyclopedia. Text is cp1252 (raw MS file), not the UTF-8 the AKC decoder emits.
 """
 from __future__ import annotations
 
+import os
 import struct
 from dataclasses import dataclass, field
+from pathlib import Path
 
 _ENC = "cp1252"
 _MAX_LEN = 1000  # clue/answer sanity bound; real clues are < 300 bytes
@@ -96,3 +98,28 @@ def build_area_pools(store) -> dict[int, set[int]]:
         if ids:
             pools[idx] = ids
     return pools
+
+
+def discover_mindmaze_db(src: str) -> list[Path]:
+    found: list[Path] = []
+    for dirpath, _dirs, files in os.walk(src):
+        for fn in files:
+            if fn.upper() == "MINDMAZE.DB":
+                found.append(Path(dirpath) / fn)
+    return sorted(found)
+
+
+def ingest_mindmaze(db_path: Path, store) -> dict:
+    data = Path(db_path).read_bytes()
+    questions = parse_mindmaze_db(data)
+    pools = build_area_pools(store)
+    if pools:
+        assign_areas(questions, pools)
+    for qid, q in enumerate(questions):
+        store.add_mindmaze_question(qid, q)
+    store.commit()
+    return {
+        "questions": len(questions),
+        "answers": sum(len(q.answers) for q in questions),
+        "with_area": sum(1 for q in questions if q.area is not None),
+    }
