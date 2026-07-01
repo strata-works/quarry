@@ -1,7 +1,10 @@
 import struct
+import tempfile
 import unittest
+from pathlib import Path
 
-from quarry.mindmaze import MindMazeAnswer, MindMazeQuestion, assign_areas, parse_mindmaze_db
+from quarry.mindmaze import MindMazeAnswer, MindMazeQuestion, assign_areas, build_area_pools, parse_mindmaze_db
+from quarry.store import ContentStore
 
 
 def mk_answer(text, refid, flag=1):
@@ -65,6 +68,48 @@ class AssignAreasTests(unittest.TestCase):
         qs = self._questions()
         assign_areas(qs, {5: {999}})
         self.assertIsNone(qs[0].area)
+
+    def test_empty_answers_area_is_none(self):
+        q = MindMazeQuestion("clue", [])
+        assign_areas([q], {0: {1}})
+        self.assertIsNone(q.area)
+
+
+class BuildAreaPoolsTests(unittest.TestCase):
+    def test_assets_dir_none_returns_empty_dict(self):
+        store = ContentStore(":memory:", assets_dir=None)
+        pools = build_area_pools(store)
+        self.assertEqual(pools, {})
+
+    def test_missing_asset_rows_returns_empty_dict(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ContentStore(":memory:", assets_dir=tmpdir)
+            pools = build_area_pools(store)
+            self.assertEqual(pools, {})
+
+    def test_missing_on_disk_file_skipped(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ContentStore(":memory:", assets_dir=tmpdir)
+            # Insert an asset row but don't create the file
+            store.db.execute(
+                "INSERT INTO asset(baggage_id, hash, kind, ext, path, source) VALUES(?,?,?,?,?,?)",
+                ("Area0", "abc123", "list", ".lst", "Area0.lst", "MINDMAZE.EIT"),
+            )
+            pools = build_area_pools(store)
+            self.assertEqual(pools, {})
+
+    def test_happy_path_reads_area_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ContentStore(":memory:", assets_dir=tmpdir)
+            # Insert asset row and create the file
+            store.db.execute(
+                "INSERT INTO asset(baggage_id, hash, kind, ext, path, source) VALUES(?,?,?,?,?,?)",
+                ("Area0", "abc123", "list", ".lst", "Area0.lst", "MINDMAZE.EIT"),
+            )
+            path = Path(tmpdir) / "Area0.lst"
+            path.write_bytes(b"761574727\n761568751\n")
+            pools = build_area_pools(store)
+            self.assertEqual(pools, {0: {761574727, 761568751}})
 
 
 if __name__ == "__main__":
