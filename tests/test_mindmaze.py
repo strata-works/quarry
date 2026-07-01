@@ -78,18 +78,21 @@ class AssignAreasTests(unittest.TestCase):
 class BuildAreaPoolsTests(unittest.TestCase):
     def test_assets_dir_none_returns_empty_dict(self):
         store = ContentStore(":memory:", assets_dir=None)
+        self.addCleanup(store.db.close)
         pools = build_area_pools(store)
         self.assertEqual(pools, {})
 
     def test_missing_asset_rows_returns_empty_dict(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = ContentStore(":memory:", assets_dir=tmpdir)
+            self.addCleanup(store.db.close)
             pools = build_area_pools(store)
             self.assertEqual(pools, {})
 
     def test_missing_on_disk_file_skipped(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = ContentStore(":memory:", assets_dir=tmpdir)
+            self.addCleanup(store.db.close)
             # Insert an asset row but don't create the file
             store.db.execute(
                 "INSERT INTO asset(baggage_id, hash, kind, ext, path, source) VALUES(?,?,?,?,?,?)",
@@ -101,6 +104,7 @@ class BuildAreaPoolsTests(unittest.TestCase):
     def test_happy_path_reads_area_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = ContentStore(":memory:", assets_dir=tmpdir)
+            self.addCleanup(store.db.close)
             # Insert asset row and create the file
             store.db.execute(
                 "INSERT INTO asset(baggage_id, hash, kind, ext, path, source) VALUES(?,?,?,?,?,?)",
