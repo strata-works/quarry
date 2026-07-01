@@ -444,7 +444,7 @@ git commit -m "feat(store): mm_question/mm_answer tables + idempotent insert"
 - Produces:
   - `discover_mindmaze_db(src: str) -> list[Path]` — every `MINDMAZE.DB` under `src`.
   - `ingest_mindmaze(db_path: Path, store) -> dict` — parses, assigns areas (best-effort), stores; returns `{"questions": int, "answers": int, "with_area": int}`.
-  - `build_corpus(..., with_mindmaze: bool = True)` runs the pass after the media pass and adds `mindmaze` stats into its `totals` dict.
+  - `build_corpus(..., with_mindmaze: bool = True)` runs the pass **after the EIT/asset pass** (so the `Area*.lst` pools it reads for area assignment already exist in the store) and adds `mindmaze` stats into its `totals` dict.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -531,7 +531,7 @@ In `quarry/corpus.py`, add the import near the other package imports:
 from .mindmaze import discover_mindmaze_db, ingest_mindmaze
 ```
 
-Add a `with_mindmaze: bool = True` parameter to `build_corpus`'s signature (alongside `with_media`), initialise `totals["mindmaze"] = {"questions": 0, "answers": 0, "with_area": 0}`, and after the media pass add:
+Add a `with_mindmaze: bool = True` parameter to `build_corpus`'s signature (alongside `with_media`), initialise `totals["mindmaze"] = {"questions": 0, "answers": 0, "with_area": 0}`, and **after the EIT/asset pass** (so the `Area*.lst` pools already exist in the store — placing it after the media pass would give `with_area=0` on a from-scratch build) add:
 
 ```python
     if with_mindmaze:
@@ -543,7 +543,7 @@ Add a `with_mindmaze: bool = True` parameter to `build_corpus`'s signature (alon
             logger.warning("ingested %s: %s", db_path.name, stats)
 ```
 
-In `quarry/cli.py`, in `cmd_build` pass `with_mindmaze=not args.no_mindmaze` into `build_corpus`, register the flag in the `build` subparser:
+In `quarry/cli.py`, in `cmd_build` pass `with_mindmaze=not args.no_mindmaze and not args.assets_only` into `build_corpus` (mirroring how `with_media` is gated on `--assets-only`), register the flag in the `build` subparser:
 
 ```python
     w.add_argument("--no-mindmaze", action="store_true", help="skip the MINDMAZE.DB question pass")
