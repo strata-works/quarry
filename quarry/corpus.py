@@ -123,15 +123,6 @@ def build_corpus(
             totals["media_failed"] += stats["failed"]
             logger.warning("ingested %s: %s", akc.name, stats)
 
-    # MindMaze question bank (MINDMAZE.DB) — best-effort area assignment.
-    if with_mindmaze:
-        for db_path in discover_mindmaze_db(src):
-            stats = ingest_mindmaze(db_path, store)
-            totals["mindmaze"]["questions"] += stats["questions"]
-            totals["mindmaze"]["answers"] += stats["answers"]
-            totals["mindmaze"]["with_area"] += stats["with_area"]
-            logger.warning("ingested %s: %s", db_path.name, stats)
-
     # Media/baggage assets (EIT containers) — parallel across cores when workers != 1.
     if with_assets and store.assets_dir is not None:
         eits = discover_eit(src)
@@ -153,6 +144,16 @@ def build_corpus(
                 totals["assets_ok"] += stats["ok"]
                 totals["assets_failed"] += stats["failed"]
                 logger.warning("ingested %s: %s", eit.name, stats)
+
+    # MindMaze questions (MINDMAZE.DB). Runs AFTER the EIT/asset pass so the
+    # Area*.lst pools it reads for area assignment already exist in the store.
+    if with_mindmaze:
+        for db_path in discover_mindmaze_db(src):
+            stats = ingest_mindmaze(db_path, store)
+            totals["mindmaze"]["questions"] += stats["questions"]
+            totals["mindmaze"]["answers"] += stats["answers"]
+            totals["mindmaze"]["with_area"] += stats["with_area"]
+            logger.warning("ingested %s: %s", db_path.name, stats)
 
     # Article titles live in the same-refid DATA* record, not the body XML; fill them
     # once content + media are in place (idempotent, no-ops if either side is absent).
