@@ -61,3 +61,38 @@ def parse_mindmaze_db(data: bytes) -> list[MindMazeQuestion]:
         out.append(MindMazeQuestion(clue, answers))
         i = j
     return out
+
+
+def assign_areas(questions: list[MindMazeQuestion],
+                 pools: dict[int, set[int]]) -> None:
+    for q in questions:
+        if not q.answers:
+            q.area = None
+            continue
+        rid = q.answers[0].article_refid
+        q.area = next((idx for idx in sorted(pools) if rid in pools[idx]), None)
+
+
+def build_area_pools(store) -> dict[int, set[int]]:
+    """Read the 9 Area*.lst refid pools out of the extracted MINDMAZE.EIT assets.
+
+    Returns {} when the asset rows or the on-disk .lst files are not present, so
+    a caller can still ingest questions with area=None.
+    """
+    if store.assets_dir is None:
+        return {}
+    pools: dict[int, set[int]] = {}
+    for idx in range(9):
+        row = store.db.execute(
+            "SELECT path FROM asset WHERE source='MINDMAZE.EIT' AND baggage_id=?",
+            (f"Area{idx}",),
+        ).fetchone()
+        if not row:
+            continue
+        path = store.assets_dir / row[0]
+        if not path.exists():
+            continue
+        ids = {int(tok) for tok in path.read_bytes().split() if tok.strip().isdigit()}
+        if ids:
+            pools[idx] = ids
+    return pools

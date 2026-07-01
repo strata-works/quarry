@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from quarry.mindmaze import MindMazeAnswer, MindMazeQuestion, parse_mindmaze_db
+from quarry.mindmaze import MindMazeAnswer, MindMazeQuestion, assign_areas, parse_mindmaze_db
 
 
 def mk_answer(text, refid, flag=1):
@@ -48,6 +48,23 @@ class ParseMindMazeDbTests(unittest.TestCase):
 
     def test_area_defaults_to_none(self):
         self.assertIsNone(parse_mindmaze_db(FIXTURE)[0].area)
+
+
+class AssignAreasTests(unittest.TestCase):
+    def _questions(self):
+        return parse_mindmaze_db(FIXTURE)
+
+    def test_assigns_lowest_matching_area(self):
+        qs = self._questions()
+        pools = {0: {761574727}, 1: {761574727, 761568751}, 2: {761568751}}
+        assign_areas(qs, pools)
+        self.assertEqual(qs[0].area, 0)  # Bombsight refid in areas 0 and 1 -> 0
+        self.assertEqual(qs[1].area, 1)  # Tractor refid in areas 1 and 2 -> 1
+
+    def test_unmatched_refid_area_is_none(self):
+        qs = self._questions()
+        assign_areas(qs, {5: {999}})
+        self.assertIsNone(qs[0].area)
 
 
 if __name__ == "__main__":
