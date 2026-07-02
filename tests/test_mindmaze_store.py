@@ -50,6 +50,15 @@ class MindMazeStoreTests(unittest.TestCase):
         self.assertEqual(self.store.mm_question_count(), 1)
         self.assertEqual(self.store.mm_answer_count(), 4)
 
+    def test_mm_answer_has_indexes_on_join_keys(self):
+        names = {
+            row[0] for row in self.store.db.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            )
+        }
+        self.assertIn("idx_mm_answer_question", names)
+        self.assertIn("idx_mm_answer_article", names)
+
 
 if __name__ == "__main__":
     unittest.main()

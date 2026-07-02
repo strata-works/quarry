@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS mm_answer(
     is_correct    INTEGER,       -- 1 for ordinal 0, else 0
     flag          INTEGER        -- raw per-answer u16 (semantics TBD; preserved)
 );
+CREATE INDEX IF NOT EXISTS idx_mm_answer_question ON mm_answer(question_id);
+CREATE INDEX IF NOT EXISTS idx_mm_answer_article  ON mm_answer(article_refid);
 """
 
 

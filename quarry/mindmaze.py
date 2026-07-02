@@ -49,13 +49,13 @@ def parse_mindmaze_db(data: bytes) -> list[MindMazeQuestion]:
         if zero != 0 or not (0 < clue_len < _MAX_LEN) or i + 8 + clue_len > n:
             break
         j = i + 8 + clue_len
-        clue = data[i + 8:j].decode(_ENC)
+        clue = data[i + 8:j].decode(_ENC, errors="replace")
         answers: list[MindMazeAnswer] = []
         while j < n and not _at_record_marker(data, j):
             alen = data[j]
             if alen == 0 or j + 1 + alen + 6 > n:
                 break
-            text = data[j + 1:j + 1 + alen].decode(_ENC)
+            text = data[j + 1:j + 1 + alen].decode(_ENC, errors="replace")
             k = j + 1 + alen
             refid, flag = struct.unpack_from("<IH", data, k)
             answers.append(MindMazeAnswer(text, refid, not answers, flag))

@@ -53,6 +53,27 @@ class ParseMindMazeDbTests(unittest.TestCase):
         self.assertIsNone(parse_mindmaze_db(FIXTURE)[0].area)
 
 
+def mk_raw_record(clue_bytes, answers=()):
+    """Like mk_record, but takes raw clue bytes (no .encode) so tests can embed
+    bytes that are undefined in cp1252 (e.g. 0x81) without failing at
+    construction time."""
+    out = struct.pack("<I", 0) + struct.pack("<I", len(clue_bytes)) + clue_bytes
+    for text, refid in answers:
+        out += mk_answer(text, refid)
+    return out
+
+
+class ParseMindMazeDbUndefinedByteTests(unittest.TestCase):
+    def test_undefined_cp1252_byte_in_clue_is_replaced_not_raised(self):
+        # 0x81 is one of the 5 bytes cp1252 leaves undefined; strict decode
+        # raises UnicodeDecodeError on it. Text is display-only, so a lossy
+        # replacement is safe and must not abort the whole ingest pass.
+        raw = mk_raw_record(b"Bad byte: \x81 here.")
+        qs = parse_mindmaze_db(raw)
+        self.assertEqual(len(qs), 1)
+        self.assertEqual(qs[0].clue, "Bad byte: � here.")
+
+
 class AssignAreasTests(unittest.TestCase):
     def _questions(self):
         return parse_mindmaze_db(FIXTURE)
