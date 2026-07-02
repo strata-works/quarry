@@ -4,23 +4,30 @@ Encarta 2009 content ETL: turn the decoded disc into a searchable content store.
 
 This is the **content pipeline** track (Linear project `strata-quarry`). It consumes
 the [`strata-akc-portable`](../akc) decoder/extractor library and builds a SQLite
-store with FTS5 full-text search, the article cross-reference graph, and (later) a
-deduped asset store + media transcode.
+store: article bodies + FTS5 full-text search, the cross-reference graph, resolved
+titles, a content-addressed asset store with article↔media links, and the MindMaze
+question bank.
 
 ## Status
 
-Early. The first vertical slice is working and validated against the real
-`CONTSTD.AKC`:
+The full ETL runs end-to-end against a real Encarta 2009 disc. A single `quarry build`
+over the disc tree produces (counts from a full build):
 
-- `quarry build-content` — decode a `CONT*.AKC` via the portable decoder and load
-  `article` (raw XML) + `article_fts` (FTS5) + `xref` (related-article graph from
-  `<xref RefID=...>`) into SQLite. Idempotent: re-running replaces rows, it does not
-  duplicate FTS entries (the prototype's bug).
+- **Articles + search** — 116,119 articles (raw XML) with 116,116 titles resolved, a
+  contentless FTS5 index, and a 211,505-edge cross-reference graph (from
+  `<xref RefID=...>`). Idempotent: re-running replaces rows, it never duplicates FTS
+  entries (the prototype's bug).
+- **Assets + media** — 409,937 content-addressed, deduped asset binaries extracted
+  from the EIT containers, plus the media graph (307,183 media / 514,398 media files /
+  158,354 article↔media links) resolved from `DATA*.AKC`.
+- **MindMaze** — 8,020 trivia questions / 32,080 answers decoded from `MINDMAZE.DB`
+  into `mm_question` + `mm_answer`, each answer joined to its `article` by refid and
+  tagged with a castle-wing area from the `Area*.lst` pools. See
+  `docs/superpowers/plans/2026-07-01-mindmaze-01-decode.md`.
 - `quarry search` — full-text query over the built DB (bm25 ranked).
 
-Not yet done: media/asset ingest from EIT baggage, `gid -> baggage-hexid` resolution
-from `DATA*/DATAF*.AKC`, `REL*.AKC` related-articles, title resolution from the index,
-media transcode. See Linear NEX-394/392/396/395.
+Still ahead: media transcode (WMV/WMA), the reader UI, and the MindMaze game UI
+(separate repos). See Linear NEX-395/396/397.
 
 ## Provenance vs. the prototype
 
@@ -58,3 +65,16 @@ quarry build-content --akc CONTSTD.AKC --map output/contstd_map.tsv \
 # 3. search
 quarry search "ottoman empire" --db build/encarta.sqlite
 ```
+
+## Build the full corpus
+
+Walk an extracted disc tree and ingest every content family plus assets, media links,
+titles, and MindMaze questions in one pass:
+
+```bash
+quarry build --src /path/to/EE --db build/encarta.sqlite
+```
+
+The MindMaze pass runs after the EIT/asset pass (so the `Area*.lst` topic pools it uses
+for area tagging already exist in the store); skip it with `--no-mindmaze`, or skip the
+whole asset pass with `--assets-only`/`--no-assets`/`--no-media` as needed.
