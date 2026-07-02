@@ -66,6 +66,22 @@ CREATE TABLE IF NOT EXISTS article_media(
     media_refid    INTEGER,
     PRIMARY KEY (article_refid, media_refid)
 );
+CREATE TABLE IF NOT EXISTS mm_question(
+    id    INTEGER PRIMARY KEY,   -- 0-based record index in MINDMAZE.DB
+    area  INTEGER,               -- castle wing 0-8 (nullable; from Area*.lst)
+    clue  TEXT
+);
+CREATE TABLE IF NOT EXISTS mm_answer(
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    question_id   INTEGER,
+    ordinal       INTEGER,       -- 0 = authored correct answer, 1-3 = decoys
+    text          TEXT,
+    article_refid INTEGER,       -- joins article.refid
+    is_correct    INTEGER,       -- 1 for ordinal 0, else 0
+    flag          INTEGER        -- raw per-answer u16 (semantics TBD; preserved)
+);
+CREATE INDEX IF NOT EXISTS idx_mm_answer_question ON mm_answer(question_id);
+CREATE INDEX IF NOT EXISTS idx_mm_answer_article  ON mm_answer(article_refid);
 """
 
 
@@ -153,6 +169,30 @@ class ContentStore:
 
     def article_media_count(self) -> int:
         return self.db.execute("SELECT count(*) FROM article_media").fetchone()[0]
+
+    def add_mindmaze_question(self, qid: int, rec) -> None:
+        db = self.db
+        db.execute(
+            "INSERT OR REPLACE INTO mm_question(id, area, clue) VALUES (?,?,?)",
+            (qid, rec.area, rec.clue),
+        )
+        db.execute("DELETE FROM mm_answer WHERE question_id=?", (qid,))
+        db.executemany(
+            "INSERT INTO mm_answer"
+            "(question_id, ordinal, text, article_refid, is_correct, flag) "
+            "VALUES (?,?,?,?,?,?)",
+            [
+                (qid, ordinal, a.text, a.article_refid,
+                 1 if a.is_correct else 0, a.flag)
+                for ordinal, a in enumerate(rec.answers)
+            ],
+        )
+
+    def mm_question_count(self) -> int:
+        return self.db.execute("SELECT count(*) FROM mm_question").fetchone()[0]
+
+    def mm_answer_count(self) -> int:
+        return self.db.execute("SELECT count(*) FROM mm_answer").fetchone()[0]
 
     def backfill_article_titles(self) -> int:
         """Set article.title from the same-refid DATA* media record.

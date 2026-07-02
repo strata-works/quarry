@@ -19,6 +19,7 @@ from strata_akc_dump.portable_akc import write_refid_key_map
 
 from .assets import ingest_eit
 from .ingest import ingest_akc, ingest_data
+from .mindmaze import discover_mindmaze_db, ingest_mindmaze
 from .store import ContentStore
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ def build_corpus(
     with_assets: bool = True,
     with_content: bool = True,
     with_media: bool = True,
+    with_mindmaze: bool = True,
     workers: int | None = None,
 ) -> dict:
     akcs = discover_content_akc(src) if with_content else []
@@ -92,6 +94,7 @@ def build_corpus(
         "families": 0, "ok": 0, "failed": 0, "per_family": {},
         "media_families": 0, "media_ok": 0, "media_failed": 0,
         "containers": 0, "assets_ok": 0, "assets_failed": 0,
+        "mindmaze": {"questions": 0, "answers": 0, "with_area": 0},
     }
     # Article content (AKC).
     for akc in akcs:
@@ -141,6 +144,16 @@ def build_corpus(
                 totals["assets_ok"] += stats["ok"]
                 totals["assets_failed"] += stats["failed"]
                 logger.warning("ingested %s: %s", eit.name, stats)
+
+    # MindMaze questions (MINDMAZE.DB). Runs AFTER the EIT/asset pass so the
+    # Area*.lst pools it reads for area assignment already exist in the store.
+    if with_mindmaze:
+        for db_path in discover_mindmaze_db(src):
+            stats = ingest_mindmaze(db_path, store)
+            totals["mindmaze"]["questions"] += stats["questions"]
+            totals["mindmaze"]["answers"] += stats["answers"]
+            totals["mindmaze"]["with_area"] += stats["with_area"]
+            logger.warning("ingested %s: %s", db_path.name, stats)
 
     # Article titles live in the same-refid DATA* record, not the body XML; fill them
     # once content + media are in place (idempotent, no-ops if either side is absent).

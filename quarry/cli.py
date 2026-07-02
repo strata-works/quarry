@@ -21,7 +21,8 @@ def cmd_build(args) -> int:
     totals = build_corpus(
         args.src, store, map_dir=args.map_dir, families=set(args.family or []),
         limit=args.limit, with_assets=not args.no_assets, with_content=not args.assets_only,
-        with_media=not args.no_media and not args.assets_only, workers=args.workers,
+        with_media=not args.no_media and not args.assets_only,
+        with_mindmaze=not args.no_mindmaze and not args.assets_only, workers=args.workers,
     )
     if totals["families"] == 0 and totals["media_families"] == 0 and totals["containers"] == 0:
         print(f"no content/data AKC families or EIT containers found under {args.src}")
@@ -37,6 +38,11 @@ def cmd_build(args) -> int:
     )
     for name, stats in totals["per_family"].items():
         print(f"  {name}: {stats['ok']} ok, {stats['failed']} failed")
+    print(
+        f"  mindmaze: questions={totals['mindmaze']['questions']} "
+        f"answers={totals['mindmaze']['answers']} "
+        f"with_area={totals['mindmaze']['with_area']}"
+    )
     return 0
 
 
@@ -72,6 +78,7 @@ def main(argv=None) -> int:
     w.add_argument("--assets-dir", default="./build/assets", help="content-addressed asset store dir")
     w.add_argument("--no-assets", action="store_true", help="skip the EIT/asset pass")
     w.add_argument("--no-media", action="store_true", help="skip the DATA*.AKC media/link pass")
+    w.add_argument("--no-mindmaze", action="store_true", help="skip the MINDMAZE.DB question pass")
     w.add_argument("--assets-only", action="store_true", help="only walk EIT for assets (skip AKC content + media)")
     w.add_argument("--family", action="append",
                    help="restrict to a content family stem, e.g. CONTSTD; may repeat")
