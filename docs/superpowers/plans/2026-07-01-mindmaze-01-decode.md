@@ -660,7 +660,7 @@ print(ingest_mindmaze(Path('$HOME/Downloads/encarta/EE/ENCARTA/MINDMAZE.DB'), st
 print('questions', store.mm_question_count(), 'answers', store.mm_answer_count())
 "
 ```
-Expected: `{'questions': 8020, 'answers': 32080, 'with_area': ~6600}` and matching counts. (`with_area` ≈ 6,600 because ~95% of the 6,923 distinct correct-answer refids fall in an `Area*.lst` pool.)
+Expected: `{'questions': 8020, 'answers': 32080, 'with_area': ~7570}` and matching counts. (Observed on the real disc: **7,570** — ~94% of the 8,020 questions get an area, higher than the 6,923 *distinct* correct-answer refids because popular in-area topics recur across many questions.)
 
 - [ ] **Step 4: Commit**
 
